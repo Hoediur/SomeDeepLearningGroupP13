@@ -26,38 +26,35 @@ def create_char_embedding_matrix():
     return embedding_matrix
 
 def build_cnn():
-    data_size = (None,1,None)  # Batch size x Img Channels x Height x Width
+    data_size = (None,1,None,101)  # Batch size x Img Channels x Height x Width
 
-
-
-    input_var = T.imatrix('input')
-    input_var = T.tensor3(name = "input",dtype='int32')
-
+    input_var = T.tensor4(name = "input",dtype='int32')
 
     input_layer = L.InputLayer(data_size, input_var=input_var)
 
     W = create_char_embedding_matrix()
 
-    embed_layer = L.EmbeddingLayer(input_layer, input_size=102, output_size=101, W=W)
+    embed_layer = L.EmbeddingLayer(input_layer, input_size=102,output_size=101, W=W)
 
-    conv_layer_1 = L.Conv2DLayer(embed_layer, 4, 1, 1, 0)
-    pool_layer_1 = L.Pool2DLayer(conv_layer_1, pool_size=1)
+    #conv_layer_1 = L.Conv2DLayer(embed_layer, 4, (1,101), 1, 0)
+    #pool_layer_1 = L.MaxPool1DLayer(conv_layer_1, pool_size=1)
 
-    conv_layer_2 = L.Conv2DLayer(embed_layer, 4, 2, 1, 1)
-    pool_layer_2 = L.Pool2DLayer(conv_layer_2, pool_size=2)
+    conv_layer_1 = L.Conv2DLayer(embed_layer, 4, (2,101), 1, 1)
+    pool_layer_1 = L.MaxPool1DLayer(conv_layer_1, pool_size=2)
 
-    conv_layer_3 = L.Conv2DLayer(embed_layer, 4, 3, 1, 2)
-    pool_layer_3 = L.Pool2DLayer(conv_layer_3, pool_size=3)
+    conv_layer_2 = L.Conv2DLayer(embed_layer, 4, (3,101), 1, 2)
+    pool_layer_2 = L.MaxPool1DLayer(conv_layer_2, pool_size=3)
 
-    merge_layer = L.ConcatLayer([pool_layer_1, pool_layer_2, pool_layer_3], 0)
+    merge_layer = L.ConcatLayer([pool_layer_1, pool_layer_2], 0)
 
 
 
-    target_var = T.ivector('targets')
+    x = input_var
+    #x = T.tensor4(name = "testname",dtype='int32')
+    #x = T.imatrix()
+    output = L.get_output(merge_layer,x)
 
-    output = L.get_output(merge_layer,T.matrix(name = "input",dtype='int32'))
-
-    f = theano.function([T.matrix(name = "input",dtype='int32')],output)
+    f = theano.function([x],output)
     x_test = np.array([[0, 2,3]]).astype('int32')
     print f(x_test)
     return merge_layer
@@ -66,7 +63,7 @@ def build_cnn():
 if __name__ == "__main__":
     #testing()
 
-    cnn = build_cnn()
+    build_cnn()
 
     #x = T.tensor4(name = "input",dtype='int32')
 
