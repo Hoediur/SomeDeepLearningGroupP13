@@ -60,6 +60,7 @@ def prepare_sents(corpus):
             tags.append(sent_tags)
             sent = []
             sent_tags = []
+        unique_tokens = [unknown_token] + list(unique_tokens)
     return sents, tags, unique_tokens, unique_tags, longest_sent
 
 def pad_sent(sents, longest_sent):
@@ -68,7 +69,6 @@ def pad_sent(sents, longest_sent):
     return sents
 
 def create_token_mappings(unique_tokens):
-    unique_tokens = [unknown_token] + list(unique_tokens)
     token_to_index = dict([(w,i) for i,w in enumerate(unique_tokens)])
     return token_to_index
 
@@ -90,6 +90,18 @@ NUM_UNITS = 1
 
 NUM_OUTPUT_UNITS = 11
 
+
+def build_network(X_train, unique_tags, unique_tokens, W, longest_sent, input_var=None):
+
+    print("Building network ...")
+
+    l_in = lasagne.layers.InputLayer(shape=X_train.shape, input_var=input_var)
+    print X_train.shape
+    l_em = lasagne.layers.EmbeddingLayer(l_in, input_size=len(unique_tokens), output_size=100, W=W)
+    l_re = lasagne.layers.RecurrentLayer(l_em, N_HIDDEN)
+    l_out = lasagne.layers.DenseLayer(l_re, len(unique_tags), nonlinearity=lasagne.nonlinearities.softmax)
+    return l_out
+
 def main():
 
     input_var = T.lmatrix('inputs')
@@ -103,14 +115,13 @@ def main():
 
     X_train = np.asarray([[token_mappings[w] for w in sent] for sent in pad_sent(sents, longest_sent)])
     y_train = np.asarray([[tag_mappings[t] for t in sent_tags] for sent_tags in tags])
-    print X_train
-    print X_train.shape, y_train.shape
 
 
     # gensim 2D NumPy matrix
     model = gensim.models.Word2Vec(sents, min_count=1)
+    # shape = (len(unique_tokens), 100)
     W = model.syn0.astype("float64")
-    print W
+    # print W.shape
 
     for epoch in range(NUM_EPOCHS):
         # In each epoch, we do a full pass over the training data:
@@ -118,11 +129,13 @@ def main():
         train_batches = 0
         start_time = time.time()
         for batch in iterate_minibatches(X_train, y_train, 2, shuffle=True):
+            print "q"
             inputs, targets = batch
+            print inputs
 
 
-    for sent in X_train:
-        network = build_network(sent, unique_tags, W, longest_sent, input_var)
+    # for sent in X_train:
+        network = build_network(X_train, unique_tags, unique_tokens, W, longest_sent, input_var)
 
         prediction = lasagne.layers.get_output(network)
 
@@ -148,7 +161,7 @@ def main():
         train_err = 0
         train_batches = 0
         start_time = time.time()
-        for batch in iterate_minibatches(X_train, y_train, 11, shuffle=True):
+        for batch in iterate_minibatches(X_train[:N_BATCH], y_train[:N_BATCH], 2, shuffle=True):
             inputs, targets = batch
 
             print inputs
@@ -167,7 +180,7 @@ def main():
 
         X_val, y_val, unique_tags = prepare_data(val_corpus)
         # print len(X_val)
-        for i in iterate_minibatches(X_val, y_val, 11, shuffle=False):
+        for i in iterate_minibatches(X_val[:N_BATCH], y_val[:N_BATCH], 2, shuffle=False):
             inputs, targets = i
             err, acc = val_fn(inputs, targets)
             val_err += err
@@ -180,7 +193,7 @@ def main():
         print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
         print("  validation accuracy:\t\t{:.2f} %".format(val_acc / val_batches * 100))
 
-def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
+def iterate_minibatches(inputs, targets, batchsize=1, shuffle=False):
     assert len(inputs) == len(targets)
     if shuffle:
         indices = np.arange(len(inputs))
@@ -192,15 +205,7 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
             excerpt = slice(start_idx, start_idx + batchsize)
         yield inputs[excerpt], targets[excerpt]
 
-def build_network(X_train, unique_tags, W, longest_sent, input_var=None):
 
-    print("Building network ...")
-
-    l_in = lasagne.layers.InputLayer(shape=X_train.shape, input_var=input_var)
-    l_em = lasagne.layers.EmbeddingLayer(l_in, input_size=longest_sent, output_size=100, W=W)
-    l_re = lasagne.layers.RecurrentLayer(l_em, N_HIDDEN)
-    l_out = lasagne.layers.DenseLayer(l_re, len(unique_tags))
-    return l_out
 
 if __name__ == '__main__':
     print main()
