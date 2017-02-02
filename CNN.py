@@ -74,14 +74,10 @@ def build_cnn():
 
     #print word_index
 
-    for char in word:
-        if char in char_index_lookup:
-            word_index = np.append(word_index, char_index_lookup[char])
-
     #x_test = np.array([word_index]).astype('int32')
     #print f(x_test)
 
-    return merge_layer
+    return reshape_output
 
 
 if __name__ == "__main__":
