@@ -16,9 +16,8 @@ import gensim
 
 
 
-train_corpus = sys.argv[1]
-val_corpus = sys.argv[2]
-# test_corpus = sys.argv[3]
+
+# ############################## Data preparation ################################
 
 unknown_token = "UNKNOWN_TOKEN"
 
@@ -34,7 +33,7 @@ def prepare_sents(corpus):
     unique_tags = set()
     unique_tokens = set()
     longest_sent = 0
-    print "Reading corpus file..."
+
     with open(corpus) as f:
         for line in f:
             if line.strip(): # check if line not empty
@@ -95,6 +94,7 @@ def build_network(X_train, unique_tags, unique_tokens, W, longest_sent, input_va
 
     print("Building network ...")
 
+    # shape = batch size shape
     l_in = lasagne.layers.InputLayer(shape=X_train.shape, input_var=input_var)
     print X_train.shape
     l_em = lasagne.layers.EmbeddingLayer(l_in, input_size=len(unique_tokens), output_size=100, W=W)
@@ -102,96 +102,13 @@ def build_network(X_train, unique_tags, unique_tokens, W, longest_sent, input_va
     l_out = lasagne.layers.DenseLayer(l_re, len(unique_tags), nonlinearity=lasagne.nonlinearities.softmax)
     return l_out
 
-def main():
 
-    input_var = T.lmatrix('inputs')
-    target_var = T.dmatrix('targets')
-
-    sents, tags, unique_tokens, unique_tags, longest_sent = prepare_sents(train_corpus)
-
-    token_mappings = create_token_mappings(unique_tokens)
-    tag_mappings = create_tag_mappings(unique_tags)
-
-
-    X_train = np.asarray([[token_mappings[w] for w in sent] for sent in pad_sent(sents, longest_sent)])
-    y_train = np.asarray([[tag_mappings[t] for t in sent_tags] for sent_tags in tags])
-
-
-    # gensim 2D NumPy matrix
-    model = gensim.models.Word2Vec(sents, min_count=1)
-    # shape = (len(unique_tokens), 100)
-    W = model.syn0.astype("float64")
-    # print W.shape
-
-    for epoch in range(NUM_EPOCHS):
-        # In each epoch, we do a full pass over the training data:
-        train_err = 0
-        train_batches = 0
-        start_time = time.time()
-        for batch in iterate_minibatches(X_train, y_train, 2, shuffle=True):
-            print "q"
-            inputs, targets = batch
-            print inputs
-
-
-    # for sent in X_train:
-        network = build_network(X_train, unique_tags, unique_tokens, W, longest_sent, input_var)
-
-        prediction = lasagne.layers.get_output(network)
-
-        loss = lasagne.objectives.categorical_crossentropy(prediction, target_var)
-        loss = loss.mean()
-        params = lasagne.layers.get_all_params(network, trainable=True)
-        updates = lasagne.updates.nesterov_momentum(loss, params, learning_rate=0.01, momentum=0.9)
-
-        train_fn = theano.function([input_var, target_var], loss, updates=updates)
-
-
-        test_prediction = lasagne.layers.get_output(network, deterministic=True)
-        test_loss = lasagne.objectives.categorical_crossentropy(test_prediction, target_var)
-        test_loss = test_loss.mean()
-        test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), target_var), dtype=theano.config.floatX)
-
-        val_fn = theano.function([input_var, target_var], [test_loss, test_acc])
-
-
-
-    for epoch in range(NUM_EPOCHS):
-        # In each epoch, we do a full pass over the training data:
-        train_err = 0
-        train_batches = 0
-        start_time = time.time()
-        for batch in iterate_minibatches(X_train[:N_BATCH], y_train[:N_BATCH], 2, shuffle=True):
-            inputs, targets = batch
-
-            print inputs
-
-
-            # err, acc = val_fn(inputs, targets)
-            # train_err_ff += err
-
-            train_err += train_fn(inputs, targets)
-            train_batches += 1
-
-        # And a full pass over the validation data:
-        val_err = 0
-        val_acc = 0
-        val_batches = 0
-
-        X_val, y_val, unique_tags = prepare_data(val_corpus)
-        # print len(X_val)
-        for i in iterate_minibatches(X_val[:N_BATCH], y_val[:N_BATCH], 2, shuffle=False):
-            inputs, targets = i
-            err, acc = val_fn(inputs, targets)
-            val_err += err
-            val_acc += acc
-            val_batches += 1
-
-        # Then we print the results for this epoch:
-        print("Epoch {} of {} took {:.9f}s".format(epoch + 1, NUM_EPOCHS, time.time() - start_time))
-        print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
-        print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
-        print("  validation accuracy:\t\t{:.2f} %".format(val_acc / val_batches * 100))
+# ############################# Batch iterator ###############################
+# This is just a simple helper function iterating over training data in
+# mini-batches of a particular size, optionally in random order. It assumes
+# data is available as numpy arrays. This function returns only mini-batches
+# of size `batchsize`. If the size of the data is not a multiple of `batchsize`,
+# it will not return the last (remaining) mini-batch.
 
 def iterate_minibatches(inputs, targets, batchsize=1, shuffle=False):
     assert len(inputs) == len(targets)
@@ -205,8 +122,125 @@ def iterate_minibatches(inputs, targets, batchsize=1, shuffle=False):
             excerpt = slice(start_idx, start_idx + batchsize)
         yield inputs[excerpt], targets[excerpt]
 
+# ############################## Main program ################################
 
+def main():
+
+    # Load the dataset
+    print "Loading data..."
+
+    sents_train, tags_train, unique_tokens_train, unique_tags_train, longest_sent_train = prepare_sents(train_corpus)
+
+    token_mappings = create_token_mappings(unique_tokens_train)
+    tag_mappings = create_tag_mappings(unique_tags_train)
+
+    X_train = np.asarray([[token_mappings[w] for w in sent] for sent in pad_sent(sents_train, longest_sent_train)])
+    y_train = np.asarray([[tag_mappings[t] for t in sent_tags] for sent_tags in tags_train])
+
+    print X_train.shape, y_train.shape
+    sents_val, tags_val, unique_tokens_val, unique_tags_val, longest_sent_val = prepare_sents(val_corpus)
+    X_val = np.asarray([[token_mappings[w] for w in sent] for sent in pad_sent(sents_val, longest_sent_val)])
+    y_val = np.asarray([[tag_mappings[t] for t in sent_tags] for sent_tags in tags_val])
+
+    sents_test, tags_test, unique_tokens_test, unique_tags_test, longest_sent_test = prepare_sents(test_corpus)
+    X_test = np.asarray([[token_mappings[w] for w in sent] for sent in pad_sent(sents_test, longest_sent_test)])
+    y_test = np.asarray([[tag_mappings[t] for t in sent_tags] for sent_tags in tags_test])
+
+
+    input_var = T.lmatrix('inputs')
+    target_var = T.dmatrix('targets')
+
+    # gensim 2D NumPy matrix
+    model = gensim.models.Word2Vec(sents_train, min_count=1)
+    # shape = (len(unique_tokens), 100)
+    W = model.syn0.astype("float64")
+    # print W.shape
+
+    network = build_network(X_train, unique_tags_train, unique_tokens_train, W, longest_sent_train, input_var)
+
+    # Create a loss expression for training, i.e., a scalar objective we want
+    # to minimize:
+    prediction = lasagne.layers.get_output(network)
+    loss = lasagne.objectives.categorical_crossentropy(prediction, target_var)
+    loss = loss.mean()
+
+    # Create update expressions for training, i.e., how to modify the
+    # parameters at each training step. Here, we'll use Stochastic Gradient
+    # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
+
+    params = lasagne.layers.get_all_params(network, trainable=True)
+    updates = lasagne.updates.nesterov_momentum(
+        loss, params, learning_rate=0.01, momentum=0.9)
+
+    # Create a loss expression for validation/testing. The crucial difference
+    # here is that we do a deterministic forward pass through the network,
+    # disabling dropout layers.
+
+    test_prediction = lasagne.layers.get_output(network, deterministic=True)
+    test_loss = lasagne.objectives.categorical_crossentropy(test_prediction,
+                                                            target_var)
+    test_loss = test_loss.mean()
+    # As a bonus, also create an expression for the classification accuracy:
+    test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), target_var),
+                      dtype=theano.config.floatX)
+
+    # Compile a function performing a training step on a mini-batch (by giving
+    # the updates dictionary) and returning the corresponding training loss:
+    train_fn = theano.function([input_var, target_var], loss, updates=updates)
+
+    # Compile a second function computing the validation loss and accuracy:
+    val_fn = theano.function([input_var, target_var], [test_loss, test_acc])
+
+    # Finally, launch the training loop.
+    print("Starting training...")
+    # We iterate over epochs:
+    for epoch in range(NUM_EPOCHS):
+        # In each epoch, we do a full pass over the training data:
+        train_err = 0
+        train_batches = 0
+        start_time = time.time()
+        for batch in iterate_minibatches(X_train, y_train, 500, shuffle=True):
+            inputs, targets = batch
+            train_err += train_fn(inputs, targets)
+            train_batches += 1
+
+        # And a full pass over the validation data:
+        val_err = 0
+        val_acc = 0
+        val_batches = 0
+        for batch in iterate_minibatches(X_val, y_val, 500, shuffle=False):
+            inputs, targets = batch
+            err, acc = val_fn(inputs, targets)
+            val_err += err
+            val_acc += acc
+            val_batches += 1
+
+        # Then we print the results for this epoch:
+        print("Epoch {} of {} took {:.3f}s".format(
+            epoch + 1, NUM_EPOCHS, time.time() - start_time))
+        print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
+        print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
+        print("  validation accuracy:\t\t{:.2f} %".format(
+            val_acc / val_batches * 100))
+
+    # After training, we compute and print the test error:
+    test_err = 0
+    test_acc = 0
+    test_batches = 0
+    for batch in iterate_minibatches(X_test, y_test, 500, shuffle=False):
+        inputs, targets = batch
+        err, acc = val_fn(inputs, targets)
+        test_err += err
+        test_acc += acc
+        test_batches += 1
+    print("Final results:")
+    print("  test loss:\t\t\t{:.6f}".format(test_err / test_batches))
+    print("  test accuracy:\t\t{:.2f} %".format(
+        test_acc / test_batches * 100))
 
 if __name__ == '__main__':
+    train_corpus = sys.argv[1]
+    val_corpus = sys.argv[2]
+    test_corpus = sys.argv[3]
     print main()
 
