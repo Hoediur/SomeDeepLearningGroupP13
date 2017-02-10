@@ -89,18 +89,14 @@ def create_tag_mappings(unique_tags):
         tag_to_vector[tag] = i
     return tag_to_index, tag_to_vector
 
-# words in corpus /training examples
-N_DATA = 719530
-
 # Number of epochs to train the net
-NUM_EPOCHS = 10
+NUM_EPOCHS = 100
 
 # Number of units in the hidden (recurrent) layer
 N_HIDDEN = 1
 
 NUM_UNITS = 1
 
-NUM_OUTPUT_UNITS = 11
 
 
 def build_network(X_train, unique_tags, unique_tokens, longest_sent, input_var=None):
@@ -114,8 +110,10 @@ def build_network(X_train, unique_tags, unique_tokens, longest_sent, input_var=N
     l_re = lasagne.layers.RecurrentLayer(l_em, N_HIDDEN, nonlinearity=lasagne.nonlinearities.sigmoid,
                                          mask_input=None)
     # l_out = lasagne.layers.DenseLayer(l_re, len(unique_tags), nonlinearity=lasagne.nonlinearities.softmax)
-    l_out = lasagne.layers.DenseLayer(l_re, 130, nonlinearity=lasagne.nonlinearities.softmax)
+    l_out = lasagne.layers.DenseLayer(l_re, longest_sent, nonlinearity=lasagne.nonlinearities.softmax)
+    print longest_sent
     return l_out
+
 
 
 # ############################# Batch iterator ###############################
@@ -173,7 +171,7 @@ def main():
     # print y_train.shape
     sents_val, tags_val, unique_tokens_val, unique_tags_val, longest_sent_val = prepare_sents(val_corpus)
 
-    pad_sent(sents_val, tags_val, longest_sent_val)
+    pad_sent(sents_val, tags_val, longest_sent_train)
     X_val = np.asarray([[(token_mappings[w] if w in token_mappings else token_mappings[unknown_token])for w in sent ] for sent in sents_val ])
     y_val = np.asarray([[tag_vector_mappings[t] for t in sent_tags] for sent_tags in tags_val])
     #y_val = np.asarray([[6, 4, 4, 3, 0, 1, 8, 2, 6], [2, 9, 1, 2, 5, 2, 7, 6, 0]])
@@ -192,7 +190,7 @@ def main():
     #         [0., 0., 0., 0., 0., 0., 1., 0., 0., 0.]]])
 
     sents_test, tags_test, unique_tokens_test, unique_tags_test, longest_sent_test = prepare_sents(test_corpus)
-    pad_sent(sents_test,tags_test, longest_sent_test)
+    pad_sent(sents_test,tags_test, longest_sent_train)
     X_test = np.asarray([[(token_mappings[w] if w in token_mappings else token_mappings[unknown_token]) for w in sent] for sent in sents_test ])
     y_test = np.asarray([[tag_vector_mappings[t] for t in sent_tags] for sent_tags in tags_test])
 
@@ -257,10 +255,10 @@ def main():
 
         for batch in iterate_minibatches(X_train, y_train, 1, shuffle=True):
             inputs, targets = batch
-            print "TEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEST"
             train_err += train_fn(inputs, targets)
             train_batches += 1
-            print train_batches
+            if train_batches % 1000 == 0:
+                print train_batches
 
         # And a full pass over the validation data:
         val_err = 0
@@ -297,8 +295,11 @@ def main():
         test_acc / test_batches * 100))
 
 if __name__ == '__main__':
-    train_corpus = "de-train.txt"
-    val_corpus = "de-dev.txt"
-    test_corpus = "de-test.txt"
+    # train_corpus = "de-train.txt"
+    # val_corpus = "de-dev.txt"
+    # test_corpus = "de-test.txt"
+    train_corpus = sys.argv[1]
+    val_corpus = sys.argv[2]
+    test_corpus = sys.argv[3]
     print main()
 
