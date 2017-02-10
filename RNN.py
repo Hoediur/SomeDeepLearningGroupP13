@@ -80,33 +80,44 @@ def create_tag_mappings(unique_tags):
         tag_to_vector[tag][i] = 1
     return tag_to_index, tag_to_vector
 
-# words in corpus /training examples
-N_DATA = 719530
+def replace_unknown_words(sents, token_mappings):
+    # for sent in sents:
+    #     for w in sent:
+    #         if w not in token_mappings:
+    #             w.replace(w, unknown_token)
+    sents = [[w.replace(w,unknown_token) if w not in token_mappings else w for w in sent ] for sent in sents]
+    return sents
 
 # Number of epochs to train the net
-NUM_EPOCHS = 10
+NUM_EPOCHS = 100
+
+
+
 
 # Number of units in the hidden (recurrent) layer
 N_HIDDEN = 1
 
-NUM_UNITS = 1
-
 NUM_OUTPUT_UNITS = 11
+
+
+def get_embeddings(model, sents):
+    return np.asarray([[model[word] for word in sent] for sent in sents])
 
 
 def build_network(X_train, unique_tags, unique_tokens, longest_sent, input_var=None):
 
     print("Building network ...")
+    print len(unique_tags)
     # shape = batch size, longest sent
-    l_in = lasagne.layers.InputLayer(shape=(None, longest_sent), input_var=input_var)
+    l_in = lasagne.layers.InputLayer(shape=(None, longest_sent, 100), input_var=input_var)
     # l_em = lasagne.layers.EmbeddingLayer(l_in, input_size=len(unique_tokens), output_size=100, W=W)
-    l_em = lasagne.layers.EmbeddingLayer(l_in, input_size=len(unique_tokens), output_size=100,  W = lasagne.init.Uniform(0.1))
+    # l_em = lasagne.layers.EmbeddingLayer(l_in, input_size=len(unique_tokens), output_size=100,  W = lasagne.init.Uniform(0.1))
     # l_ex = lasagne.layers.ExpressionLayer(l_in, lambda X: X, output_shape='auto')
-    l_re = lasagne.layers.RecurrentLayer(l_em, N_HIDDEN, nonlinearity=lasagne.nonlinearities.sigmoid,
-                                         mask_input=None)
-    # l_out = lasagne.layers.DenseLayer(l_re, len(unique_tags), nonlinearity=lasagne.nonlinearities.softmax)
-    l_out = lasagne.layers.DenseLayer(l_re, 9, nonlinearity=lasagne.nonlinearities.softmax)
+    l_re = lasagne.layers.RecurrentLayer(l_in, N_HIDDEN, nonlinearity=lasagne.nonlinearities.sigmoid)
+    # l_out = lasagne.layers.DenseLayer(l_re, longest_sent, nonlinearity=lasagne.nonlinearities.softmax)
+    l_out = lasagne.layers.DenseLayer(l_re, longest_sent, nonlinearity=lasagne.nonlinearities.softmax)
     return l_out
+
 
 
 # ############################# Batch iterator ###############################
@@ -142,59 +153,81 @@ def main():
 
     X_train = np.asarray([[token_mappings[w] for w in sent] for sent in pad_sent(sents_train, longest_sent_train)])
     y_train = np.asarray([[tag_vector_mappings[t] for t in sent_tags] for sent_tags in tags_train])
-    y_train = np.asarray([[6, 4, 4, 3, 0, 1, 8, 2, 6], [2, 9, 1, 2, 5, 2, 7, 6, 0]])
+    y_train = np.asarray([[6, 4, 4, 3, 0, 1, 8], [2, 9, 1, 2, 5, 2, 7]])
     # y_train = np.asarray(
-    # [[[0., 0., 0., 0., 0., 0., 1., 0., 0., 0.], [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
-    #   [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.], [0., 0., 0., 1., 0., 0., 0., 0., 0., 0.],
-    #   [1., 0., 0., 0., 0., 0., 0., 0., 0., 0.], [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
-    #   [0., 0., 0., 0., 0., 0., 0., 0., 1., 0.], [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #   [0., 0., 0., 0., 0., 0., 1., 0., 0., 0.]],
-    #  [[0., 0., 1., 0., 0., 0., 0., 0., 0., 0.], [0., 0., 0., 0., 0., 0., 0., 0., 0., 1.],
-    #         [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.], [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #         [0., 0., 0., 0., 0., 1., 0., 0., 0., 0.], [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #         [0., 0., 0., 0., 0., 0., 0., 1., 0., 0.], [0., 0., 0., 0., 0., 0., 1., 0., 0., 0.],
-    #         [0., 0., 0., 0., 0., 0., 1., 0., 0., 0.]]])
+    #    [[[0., 0., 0., 0., 0., 0., 1., 0., 0., 0.],
+    #      [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 1., 0., 0., 0., 0., 0., 0.],
+    #      [1., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 0., 0., 0., 0., 0., 1., 0.]],
+    #     [[0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 0., 0., 0., 0., 0., 0., 1.],
+    #      [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 0., 0., 1., 0., 0., 0., 0.],
+    #      [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 0., 0., 0., 0., 1., 0., 0.]]])
 
-    # print X_train
-    # print y_train.shape
     sents_val, tags_val, unique_tokens_val, unique_tags_val, longest_sent_val = prepare_sents(val_corpus)
 
-
-    X_val = np.asarray([[token_mappings[w] for w in sent] for sent in pad_sent(sents_val, longest_sent_val)])
+    X_val = np.asarray([[token_mappings[w] for w in sent] for sent in pad_sent(replace_unknown_words(sents_val, token_mappings), longest_sent_val)])
     y_val = np.asarray([[tag_vector_mappings[t] for t in sent_tags] for sent_tags in tags_val])
-    y_val = np.asarray([[6, 4, 4, 3, 0, 1, 8, 2, 6], [2, 9, 1, 2, 5, 2, 7, 6, 0]])
-
-
+    y_val = np.asarray([[6, 4, 4, 3, 0, 1, 8], [2, 9, 1, 2, 5, 2, 7]])
     # y_val = np.asarray(
-    # [[[0., 0., 0., 0., 0., 0., 1., 0., 0., 0.], [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
-    #   [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.], [0., 0., 0., 1., 0., 0., 0., 0., 0., 0.],
-    #   [1., 0., 0., 0., 0., 0., 0., 0., 0., 0.], [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
-    #   [0., 0., 0., 0., 0., 0., 0., 0., 1., 0.], [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #   [0., 0., 0., 0., 0., 0., 1., 0., 0., 0.]],
-    #  [[0., 0., 1., 0., 0., 0., 0., 0., 0., 0.], [0., 0., 0., 0., 0., 0., 0., 0., 0., 1.],
-    #         [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.], [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #         [0., 0., 0., 0., 0., 1., 0., 0., 0., 0.], [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #         [0., 0., 0., 0., 0., 0., 0., 1., 0., 0.], [0., 0., 0., 0., 0., 0., 1., 0., 0., 0.],
-    #         [0., 0., 0., 0., 0., 0., 1., 0., 0., 0.]]])
+    #    [[[0., 0., 0., 0., 0., 0., 1., 0., 0., 0.],
+    #      [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 1., 0., 0., 0., 0., 0., 0.],
+    #      [1., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 0., 0., 0., 0., 0., 1., 0.]],
+    #     [[0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 0., 0., 0., 0., 0., 0., 1.],
+    #      [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 0., 0., 1., 0., 0., 0., 0.],
+    #      [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 0., 0., 0., 0., 1., 0., 0.]]])
 
     sents_test, tags_test, unique_tokens_test, unique_tags_test, longest_sent_test = prepare_sents(test_corpus)
-    X_test = np.asarray([[token_mappings[w] for w in sent] for sent in pad_sent(sents_test, longest_sent_test)])
+    X_test = np.asarray([[token_mappings[w] for w in sent] for sent in pad_sent(replace_unknown_words(sents_test, token_mappings), longest_sent_test)])
     y_test = np.asarray([[tag_vector_mappings[t] for t in sent_tags] for sent_tags in tags_test])
 
-    y_test = np.asarray([[6, 4, 4, 3, 0, 1, 8, 2, 6], [2, 9, 1, 2, 5, 2, 7, 6, 0]])
+    y_test = np.asarray([[6, 4, 4, 3, 0, 1, 8], [2, 9, 1, 2, 5, 2, 7]])
+    # y_test = np.asarray(
+    #    [[[0., 0., 0., 0., 0., 0., 1., 0., 0., 0.],
+    #      [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 1., 0., 0., 0., 0., 0., 0.],
+    #      [1., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 0., 0., 0., 0., 0., 1., 0.]],
+    #     [[0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 0., 0., 0., 0., 0., 0., 1.],
+    #      [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 0., 0., 1., 0., 0., 0., 0.],
+    #      [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
+    #      [0., 0., 0., 0., 0., 0., 0., 1., 0., 0.]]])
 
-    input_var = T.lmatrix('inputs')
+
+    # input_var = T.lmatrix('inputs')
+    input_var = T.dtensor3('targets')
     # target_var = T.dtensor3('targets')
-    target_var = T.lmatrix('targets')
+    target_var = T.dmatrix('targets')
 
-    # # gensim 2D NumPy matrix
-    # model = gensim.models.Word2Vec(sents_train, min_count=1)
-    # # shape = (len(unique_tokens), 100)
-    # W = model.syn0.astype("float64")
-    # # print W.shape
+    # gensim 2D NumPy matrix
+    model_train = gensim.models.Word2Vec(sents_train, min_count=1)
+    # W = model_train.syn0.astype("float64")
+    emb_train = get_embeddings(model_train, sents_train)
+    model_val = gensim.models.Word2Vec(sents_val, min_count=1)
+    emb_val = get_embeddings(model_val, sents_val)
+    model_test = gensim.models.Word2Vec(sents_test, min_count=1)
+    emb_test = get_embeddings(model_test, sents_test)
 
-    network = build_network(X_train, unique_tags_train, unique_tokens_train, longest_sent_train, input_var)
-
+    network = build_network(emb_train, unique_tags_train, unique_tokens_train, longest_sent_train, input_var)
     # Create a loss expression for training, i.e., a scalar objective we want
     # to minimize:
     prediction = lasagne.layers.get_output(network)
@@ -214,11 +247,15 @@ def main():
     # disabling dropout layers.
 
     test_prediction = lasagne.layers.get_output(network, deterministic=True)
+
+    f_test = theano.function([input_var], test_prediction)
+
     test_loss = lasagne.objectives.categorical_crossentropy(test_prediction, target_var)
     test_loss = test_loss.mean()
     # As a bonus, also create an expression for the classification accuracy:
-    test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=0), target_var),
+    test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=None), target_var),
                       dtype=theano.config.floatX)
+    # target_var = T.dtensor3('targets')
 
     # Compile a function performing a training step on a mini-batch (by giving
     # the updates dictionary) and returning the corresponding training loss:
@@ -235,17 +272,20 @@ def main():
         train_err = 0
         train_batches = 0
         start_time = time.time()
-        for batch in iterate_minibatches(X_train, y_train, 1, shuffle=True):
+        for batch in iterate_minibatches(emb_train, y_train, 2, shuffle=True):
             inputs, targets = batch
+            # print inputs, targets
             train_err += train_fn(inputs, targets)
             train_batches += 1
 
+        print("Starting validation...")
         # And a full pass over the validation data:
         val_err = 0
         val_acc = 0
         val_batches = 0
-        for batch in iterate_minibatches(X_val, y_val, 1, shuffle=False):
+        for batch in iterate_minibatches(emb_val, y_val, 1, shuffle=False):
             inputs, targets = batch
+            # print inputs, targets
             err, acc = val_fn(inputs, targets)
             val_err += err
             val_acc += acc
@@ -259,12 +299,17 @@ def main():
         print("  validation accuracy:\t\t{:.2f} %".format(
             val_acc / val_batches * 100))
 
+    print("Starting testing...")
     # After training, we compute and print the test error:
     test_err = 0
     test_acc = 0
     test_batches = 0
-    for batch in iterate_minibatches(X_test, y_test, 1, shuffle=False):
+    for batch in iterate_minibatches(emb_test, y_test, 1, shuffle=False):
         inputs, targets = batch
+        # print inputs, targets
+        print f_test(inputs)
+        print inputs.shape
+        print targets.shape
         err, acc = val_fn(inputs, targets)
         test_err += err
         test_acc += acc
