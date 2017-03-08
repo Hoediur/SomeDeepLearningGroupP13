@@ -14,6 +14,11 @@ from random import shuffle
 import time
 #import gensim
 import CNN
+import lasagne.layers as L
+
+import WordMatrix
+import string
+
 
 
 
@@ -21,7 +26,31 @@ import CNN
 # ############################## Data preparation ################################
 
 unknown_token = "UNKNOWN_TOKEN"
-char_index_table = None
+theano.config.compute_test_value = "ignore"
+char_vocab = unicode(string.ascii_letters + string.punctuation + string.digits+"äöüÄÖÜß", "utf-8") #define vocabulary for characters
+char_index_table = dict()
+
+def create_char_embedding_matrix():
+    index = 0
+    embedding_matrix = WordMatrix.generate_random_char_embedding("unknown")
+    char_index_table["unknown"] = index
+    index += 1
+
+    new_vector = WordMatrix.generate_random_char_embedding("padding")
+    embedding_matrix = np.concatenate((embedding_matrix, new_vector), 0)
+
+    char_index_table["padding"] = index
+
+
+    for char in char_vocab:
+        index += 1
+        new_vector = WordMatrix.generate_random_char_embedding(char)
+
+        embedding_matrix = np.concatenate((embedding_matrix, new_vector), 0)
+        char_index_table[char] = index
+
+    return embedding_matrix
+
 
 def prepare_sents(corpus):
     """Preprocesses data: generate list of sentences, tags, vocabulary of tokens/tags,
@@ -66,6 +95,14 @@ def prepare_sents(corpus):
 
     return sents, tags, unique_tokens, unique_tags, longest_sent
 
+def pad_sent(sents,tags, longest_sent):
+    for sent in sents:
+        sent += ["pad_value_rnn"] * (longest_sent - len(sent))
+
+    for tag in tags:
+        tag += ["pad_value_rnn"] * (longest_sent - len(tag))
+
+    return sents
 
 def create_token_mappings(unique_tokens):
     token_to_index = dict([(w,i) for i,w in enumerate(unique_tokens)])
@@ -92,7 +129,7 @@ NUM_UNITS = 1
 
 
 
-def build_network(cnn,longest_sent, input_var=None):
+def build_network(W,longest_sent, input_var=None):
 
     print("Building network ...")
     # shape = batch size, longest sent
@@ -101,12 +138,45 @@ def build_network(cnn,longest_sent, input_var=None):
     #l_em = lasagne.layers.EmbeddingLayer(l_in, input_size=len(unique_tokens), output_size=100,  W = lasagne.init.Uniform(0.1))
     # l_ex = lasagne.layers.ExpressionLayer(l_in, lambda X: X, output_shape='auto')
 
+    #values = np.array(np.random.randint(0,102,(1,9,50)))
 
-    l_re = lasagne.layers.RecurrentLayer(cnn, N_HIDDEN, nonlinearity=lasagne.nonlinearities.sigmoid,
-                                         mask_input=None)
-    # l_out = lasagne.layers.DenseLayer(l_re, len(unique_tags), nonlinearity=lasagne.nonlinearities.softmax)
-    l_out = lasagne.layers.DenseLayer(l_re, 100, nonlinearity=lasagne.nonlinearities.softmax)
+    #input_var.tag.test_value = values
+    #number sentences x words x characters
+    input_layer = L.InputLayer((None,9,50), input_var=input_var)
 
+    embed_layer = L.EmbeddingLayer(input_layer, input_size=103,output_size=101, W=W)
+    #print "EMBED", L.get_output(embed_layer).tag.test_value.shape
+    reshape_embed = L.reshape(embed_layer,(-1,50,101))
+    #print "reshap embed", L.get_output(reshape_embed).tag.test_value.shape
+    conv_layer_1 = L.Conv1DLayer(reshape_embed, 55, 2)
+    conv_layer_2 = L.Conv1DLayer(reshape_embed, 55, 3)
+    #print "TEST"
+    #print "Convolution Layer 1", L.get_output(conv_layer_1).tag.test_value.shape
+    #print "Convolution Layer 2", L.get_output(conv_layer_2).tag.test_value.shape
+
+    pool_layer_1 = L.MaxPool1DLayer(conv_layer_1, pool_size=54)
+    pool_layer_2 = L.MaxPool1DLayer(conv_layer_2, pool_size=53)
+
+
+    #print "OUTPUT POOL1", L.get_output(pool_layer_1).tag.test_value.shape
+    #print "OUTPUT POOL2",L.get_output(pool_layer_2).tag.test_value.shape
+
+    merge_layer = L.ConcatLayer([pool_layer_1, pool_layer_2], 1)
+
+    flatten_merge = L.flatten(merge_layer, 2)
+    reshape_merge = L.reshape(flatten_merge, (1,9,110))
+
+
+
+    l_re = lasagne.layers.RecurrentLayer(reshape_merge, N_HIDDEN, nonlinearity=lasagne.nonlinearities.sigmoid, mask_input=None)
+    #print "OUTPUT RECURRENT", L.get_output(l_re).tag.test_value.shape
+
+    #l_out = lasagne.layers.DenseLayer(l_re, len(unique_tags), nonlinearity=lasagne.nonlinearities.softmax)
+
+    l_out = lasagne.layers.DenseLayer(l_re, 101, nonlinearity=lasagne.nonlinearities.softmax)
+    #print "OUTPUT", L.get_output(l_out).tag.test_value.shape
+
+    print "DONE BUILDING NETWORK"
     return l_out
 
 
@@ -138,6 +208,7 @@ def create_word_index_vectors(corpus,max_length):
     result = None
     n = 0
     for sent in corpus:
+        temp_result = None
         for word in sent:
             n +=1
             if n % 10000 == 0:
@@ -145,6 +216,10 @@ def create_word_index_vectors(corpus,max_length):
             word_array = []
 
             for char in unicode(word,"utf-8"):
+
+                if word == "pad_value_rnn":
+                    break
+
                 if char in char_index_table:
                     word_array.append(char_index_table[char])
                 else:
@@ -155,10 +230,15 @@ def create_word_index_vectors(corpus,max_length):
             if delta_word >0:
                 word_array += [char_index_table["padding"]]*delta_word
 
-            if result is None:
-                result = np.array([word_array])
+            if temp_result is None:
+                temp_result = np.array([word_array])
             else:
-                result = np.append(result, [np.array(word_array)], axis=0)
+                temp_result = np.append(temp_result, [np.array(word_array)], axis=0)
+
+        if result is None:
+            result = np.array([temp_result])
+        else:
+            result = np.append(result,[temp_result],axis=0)
 
         return result
 
@@ -166,6 +246,7 @@ def create_tag_vectors(corpus_tag_sequence,tag_vector_mappings):
     result = None
     n = 0
     for tags in corpus_tag_sequence:
+
         for tag in tags:
             n += 1
             if n % 10000 == 0:
@@ -181,17 +262,16 @@ def create_tag_vectors(corpus_tag_sequence,tag_vector_mappings):
 
 def main():
 
-    input_var = T.lmatrix('inputs')
-    #input_var = T.tensor3(name="input", dtype='int64')
+    #input_var = T.lmatrix('inputs')
+    input_var = T.tensor3(name="input", dtype='int64')
     # target_var = T.dtensor3('targets')
     target_var = T.dmatrix('targets')
 
+    W = create_char_embedding_matrix()
 
     # Load the dataset
     print "Loading data..."
-    global char_index_table
     #build cnn
-    cnn, char_index_table = CNN.build_cnn(input_var)
 
     sents_train, tags_train, unique_tokens_train, unique_tags_train, longest_sent_train = prepare_sents(train_corpus)
 
@@ -200,31 +280,20 @@ def main():
 
     print np.array(sents_train).shape
 
-    X_train = create_word_index_vectors(sents_train,50)
+    pad_sent(sents_train, tags_train, longest_sent_train)
+
+    X_train = create_word_index_vectors(sents_train,55)
     y_train = create_tag_vectors(tags_train,tag_vector_mappings)
+
     print "TEST",X_train.shape
-    #X_train = np.asarray([[[char_index_table[char] if char in char_index_table else char_index_table["unknown"]for char in unicode(word,"utf-8")]for word in sent]for sent in sents_train])
-    #y_train = np.asarray([[tag_vector_mappings[t] for t in sent_tags] for sent_tags in tags_train])
 
-
-    #y_train = np.asarray([[6, 4, 4, 3, 0, 1, 8, 2, 6], [2, 9, 1, 2, 5, 2, 7, 6, 0]])
-    # y_train = np.asarray(
-    # [[[0., 0., 0., 0., 0., 0., 1., 0., 0., 0.], [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
-    #   [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.], [0., 0., 0., 1., 0., 0., 0., 0., 0., 0.],
-    #   [1., 0., 0., 0., 0., 0., 0., 0., 0., 0.], [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
-    #   [0., 0., 0., 0., 0., 0., 0., 0., 1., 0.], [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #   [0., 0., 0., 0., 0., 0., 1., 0., 0., 0.]],
-    #  [[0., 0., 1., 0., 0., 0., 0., 0., 0., 0.], [0., 0., 0., 0., 0., 0., 0., 0., 0., 1.],
-    #         [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.], [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #         [0., 0., 0., 0., 0., 1., 0., 0., 0., 0.], [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #         [0., 0., 0., 0., 0., 0., 0., 1., 0., 0.], [0., 0., 0., 0., 0., 0., 1., 0., 0., 0.],
-    #         [0., 0., 0., 0., 0., 0., 1., 0., 0., 0.]]])
-
-    # print X_train
-    # print y_train.shape
     sents_val, tags_val, unique_tokens_val, unique_tags_val, longest_sent_val = prepare_sents(val_corpus)
     print "EVAL"
-    X_val = create_word_index_vectors(sents_val, 50)
+
+    pad_sent(sents_val, tags_val, longest_sent_train)
+
+
+    X_val = create_word_index_vectors(sents_val, 55)
     y_val = create_tag_vectors(tags_val, tag_vector_mappings)
     #X_val = np.asarray([[[(char_index_table[char] if char in char_index_table else char_index_table["unknown"])for char in unicode(w,"utf-8")]for w in sent] for sent in sents_val])
     #y_val = np.asarray([[tag_vector_mappings[t] for t in sent_tags] for sent_tags in tags_val])
@@ -245,7 +314,8 @@ def main():
 
     sents_test, tags_test, unique_tokens_test, unique_tags_test, longest_sent_test = prepare_sents(test_corpus)
     print "TEST"
-    X_test = create_word_index_vectors(sents_test, 50)
+    pad_sent(sents_test, tags_test, longest_sent_train)
+    X_test = create_word_index_vectors(sents_test, 55)
     y_test = create_tag_vectors(tags_test, tag_vector_mappings)
 
     #X_test = np.asarray([[[(char_index_table[char] if char in char_index_table else char_index_table["unknown"])for char in unicode(w,"utf-8")]for w in sent] for sent in sents_test])
@@ -261,7 +331,7 @@ def main():
     # W = model.syn0.astype("float64")
     # # print W.shape
 
-    network = build_network(cnn,longest_sent_train, input_var)
+    network = build_network(W,longest_sent_train, input_var)
 
     # Create a loss expression for training, i.e., a scalar objective we want
     # to minimize:
@@ -276,7 +346,7 @@ def main():
     params = lasagne.layers.get_all_params(network, trainable=True)
     updates = lasagne.updates.nesterov_momentum(
         loss, params, learning_rate=0.01, momentum=0.9)
-
+    print "PARAMS"
     # Create a loss expression for validation/testing. The crucial difference
     # here is that we do a deterministic forward pass through the network,
     # disabling dropout layers.
@@ -305,7 +375,7 @@ def main():
         start_time = time.time()
 
 
-        print X_train.shape
+        print "X_SHAPE",X_train.shape
         print y_train.shape
 
         for batch in iterate_minibatches(X_train, y_train, 1, shuffle=True):
@@ -358,5 +428,9 @@ if __name__ == '__main__':
     #val_corpus = sys.argv[2]
     #test_corpus = sys.argv[3]
     print main()
+    #W =  create_char_embedding_matrix()
+    #input_var = T.tensor3(name="input", dtype='int64')
+    #build_network(W,130,input_var)
+
 
 

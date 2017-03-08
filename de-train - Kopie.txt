@@ -1,0 +1,27 @@
+``	$LRB
+Ross	NE
+Perot	NE
+wäre	VAFIN
+vielleicht	ADV
+ein	ART
+prächtiger	ADJA
+Diktator	NN
+''	$LRB
+
+Konzernchefs	NN
+lehnen	VVFIN
+den	ART
+Milliardär	NN
+als	APPR
+US-Präsidenten	NN
+ab	PTKVZ
+/	$LRB
+
+Texaner	NN
+gibt	VVFIN
+nur	ADV
+vage	ADJA
+Auskunft	NN
+über	APPR
+seine	PPOSAT
+Wirtschaftspolitik	NN

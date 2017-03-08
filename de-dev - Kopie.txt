@@ -1,0 +1,9 @@
+``	$LRB
+Ross	NE
+Perot	NE
+wäre	VAFIN
+vielleicht	ADV
+ein	ART
+prächtiger	ADJA
+Diktator	NN
+''	$LRB
