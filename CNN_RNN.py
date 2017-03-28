@@ -164,16 +164,16 @@ def build_network(W,longest_sent, input_var=None):
     merge_layer = L.ConcatLayer([pool_layer_1, pool_layer_2], 1)
 
     flatten_merge = L.flatten(merge_layer, 2)
-    reshape_merge = L.reshape(flatten_merge, (1,9,110))
+    #reshape_merge = L.reshape(flatten_merge, (-1,9,110))
 
 
 
-    l_re = lasagne.layers.RecurrentLayer(reshape_merge, N_HIDDEN, nonlinearity=lasagne.nonlinearities.sigmoid, mask_input=None)
+    l_re = lasagne.layers.RecurrentLayer(merge_layer, N_HIDDEN, nonlinearity=lasagne.nonlinearities.sigmoid, mask_input=None)
     #print "OUTPUT RECURRENT", L.get_output(l_re).tag.test_value.shape
 
     #l_out = lasagne.layers.DenseLayer(l_re, len(unique_tags), nonlinearity=lasagne.nonlinearities.softmax)
 
-    l_out = lasagne.layers.DenseLayer(l_re, 101, nonlinearity=lasagne.nonlinearities.softmax)
+    l_out = lasagne.layers.DenseLayer(l_re, 110, nonlinearity=lasagne.nonlinearities.softmax)
     #print "OUTPUT", L.get_output(l_out).tag.test_value.shape
 
     print "DONE BUILDING NETWORK"
@@ -274,6 +274,10 @@ def main():
     #build cnn
 
     sents_train, tags_train, unique_tokens_train, unique_tags_train, longest_sent_train = prepare_sents(train_corpus)
+    print "Unique tags",len(unique_tags_train)
+    print "# sents", len(unique_tags_train)
+    print "Unique tags", len(unique_tags_train)
+    print "Unique tags", len(sents_train)
 
     token_mappings = create_token_mappings(unique_tokens_train)
     tag_index_mappings, tag_vector_mappings = create_tag_mappings(unique_tags_train)
@@ -314,6 +318,7 @@ def main():
 
     sents_test, tags_test, unique_tokens_test, unique_tags_test, longest_sent_test = prepare_sents(test_corpus)
     print "TEST"
+
     pad_sent(sents_test, tags_test, longest_sent_train)
     X_test = create_word_index_vectors(sents_test, 55)
     y_test = create_tag_vectors(tags_test, tag_vector_mappings)
@@ -360,11 +365,12 @@ def main():
 
     # Compile a function performing a training step on a mini-batch (by giving
     # the updates dictionary) and returning the corresponding training loss:
+    print y_train.shape
     train_fn = theano.function([input_var, target_var], loss, updates=updates)
-
+    print "training"
     # Compile a second function computing the validation loss and accuracy:
     val_fn = theano.function([input_var, target_var], [test_loss, test_acc])
-
+    print "value"
     # Finally, launch the training loop.
     print("Starting training...")
     # We iterate over epochs:
@@ -376,7 +382,7 @@ def main():
 
 
         print "X_SHAPE",X_train.shape
-        print y_train.shape
+        print "Y_SHAPE",y_train.shape
 
         for batch in iterate_minibatches(X_train, y_train, 1, shuffle=True):
             inputs, targets = batch
@@ -424,13 +430,8 @@ if __name__ == '__main__':
     train_corpus = "de-train - Kopie.txt"
     val_corpus = "de-dev - Kopie.txt"
     test_corpus = "de-test - Kopie.txt"
-    #train_corpus = sys.argv[1]
-    #val_corpus = sys.argv[2]
-    #test_corpus = sys.argv[3]
-    print main()
-    #W =  create_char_embedding_matrix()
-    #input_var = T.tensor3(name="input", dtype='int64')
-    #build_network(W,130,input_var)
+    main()
+
 
 
 
