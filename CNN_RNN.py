@@ -13,6 +13,7 @@ import sys
 from random import shuffle
 import time
 #import gensim
+
 import CNN
 import lasagne.layers as L
 
@@ -63,9 +64,10 @@ def prepare_sents(corpus):
     unique_tags = set()
     unique_tokens = set()
     longest_sent = 0
-
+    longest_word = 0
     with open(corpus) as f:
         for line in f:
+
             if line.strip(): # check if line not empty
                 token = re.split(r'\t', line)[0]
                 tag = re.split(r'\t', line)[1].strip()
@@ -74,6 +76,9 @@ def prepare_sents(corpus):
 
                 unique_tags.add(tag)
                 unique_tokens.add(token)
+                token_length = len(token)
+                if token_length > longest_word:
+                    longest_word = token_length
             else:
                 sents.append(sent)
                 if len(sent) > longest_sent:
@@ -96,11 +101,12 @@ def prepare_sents(corpus):
     return sents, tags, unique_tokens, unique_tags, longest_sent
 
 def pad_sent(sents,tags, longest_sent):
-    for sent in sents:
-        sent += ["pad_value_rnn"] * (longest_sent - len(sent))
 
-    for tag in tags:
-        tag += ["pad_value_rnn"] * (longest_sent - len(tag))
+    #for sent in sents:
+    #    sent += ["pad_value_rnn"] * (longest_sent - len(sent))
+
+    #for tag in tags:
+     #   tag += ["pad_value_rnn"] * (longest_sent - len(tag))
 
     return sents
 
@@ -120,16 +126,16 @@ def create_tag_mappings(unique_tags):
     return tag_to_index, tag_to_vector
 
 # Number of epochs to train the net
-NUM_EPOCHS = 100
+NUM_EPOCHS = 10
 
 # Number of units in the hidden (recurrent) layer
-N_HIDDEN = 1
+N_HIDDEN = 10
 
-NUM_UNITS = 1
+NUM_UNITS = 10
 
 
 
-def build_network(W,longest_sent, input_var=None):
+def build_network(W,number_unique_tags,longest_word, input_var=None):
 
     print("Building network ...")
     # shape = batch size, longest sent
@@ -138,43 +144,44 @@ def build_network(W,longest_sent, input_var=None):
     #l_em = lasagne.layers.EmbeddingLayer(l_in, input_size=len(unique_tokens), output_size=100,  W = lasagne.init.Uniform(0.1))
     # l_ex = lasagne.layers.ExpressionLayer(l_in, lambda X: X, output_shape='auto')
 
-    #values = np.array(np.random.randint(0,102,(1,9,50)))
+    values = np.array(np.random.randint(0,103,(1,9,55)))
 
-    #input_var.tag.test_value = values
+    input_var.tag.test_value = values
     #number sentences x words x characters
-    input_layer = L.InputLayer((None,9,50), input_var=input_var)
+    input_layer = L.InputLayer((None,9,55), input_var=input_var)
 
     embed_layer = L.EmbeddingLayer(input_layer, input_size=103,output_size=101, W=W)
-    #print "EMBED", L.get_output(embed_layer).tag.test_value.shape
-    reshape_embed = L.reshape(embed_layer,(-1,50,101))
-    #print "reshap embed", L.get_output(reshape_embed).tag.test_value.shape
+    print "EMBED", L.get_output(embed_layer).tag.test_value.shape
+    reshape_embed = L.reshape(embed_layer,(-1,55,101))
+    print "reshap embed", L.get_output(reshape_embed).tag.test_value.shape
     conv_layer_1 = L.Conv1DLayer(reshape_embed, 55, 2)
     conv_layer_2 = L.Conv1DLayer(reshape_embed, 55, 3)
-    #print "TEST"
-    #print "Convolution Layer 1", L.get_output(conv_layer_1).tag.test_value.shape
-    #print "Convolution Layer 2", L.get_output(conv_layer_2).tag.test_value.shape
+    print "TEST"
+    print "Convolution Layer 1", L.get_output(conv_layer_1).tag.test_value.shape
+    print "Convolution Layer 2", L.get_output(conv_layer_2).tag.test_value.shape
 
     pool_layer_1 = L.MaxPool1DLayer(conv_layer_1, pool_size=54)
     pool_layer_2 = L.MaxPool1DLayer(conv_layer_2, pool_size=53)
 
 
-    #print "OUTPUT POOL1", L.get_output(pool_layer_1).tag.test_value.shape
-    #print "OUTPUT POOL2",L.get_output(pool_layer_2).tag.test_value.shape
+    print "OUTPUT POOL1", L.get_output(pool_layer_1).tag.test_value.shape
+    print "OUTPUT POOL2",L.get_output(pool_layer_2).tag.test_value.shape
 
     merge_layer = L.ConcatLayer([pool_layer_1, pool_layer_2], 1)
 
     flatten_merge = L.flatten(merge_layer, 2)
-    #reshape_merge = L.reshape(flatten_merge, (-1,9,110))
+    reshape_merge = L.reshape(flatten_merge, (-1,9,110))
+    print "OUTPUT RESHAPEMERGE", L.get_output(reshape_merge).tag.test_value.shape
 
 
 
-    l_re = lasagne.layers.RecurrentLayer(merge_layer, N_HIDDEN, nonlinearity=lasagne.nonlinearities.sigmoid, mask_input=None)
-    #print "OUTPUT RECURRENT", L.get_output(l_re).tag.test_value.shape
+    l_re = lasagne.layers.RecurrentLayer(reshape_merge, N_HIDDEN, nonlinearity=lasagne.nonlinearities.sigmoid, mask_input=None)
+    print "OUTPUT RECURRENT", L.get_output(l_re).tag.test_value.shape
 
     #l_out = lasagne.layers.DenseLayer(l_re, len(unique_tags), nonlinearity=lasagne.nonlinearities.softmax)
 
-    l_out = lasagne.layers.DenseLayer(l_re, 110, nonlinearity=lasagne.nonlinearities.softmax)
-    #print "OUTPUT", L.get_output(l_out).tag.test_value.shape
+    l_out = lasagne.layers.DenseLayer(l_re, number_unique_tags, nonlinearity=lasagne.nonlinearities.softmax)
+    print "OUTPUT", L.get_output(l_out).tag.test_value.shape
 
     print "DONE BUILDING NETWORK"
     return l_out
@@ -215,10 +222,10 @@ def create_word_index_vectors(corpus,max_length):
                 print n
             word_array = []
 
-            for char in unicode(word,"utf-8"):
+            if word == "pad_value_rnn":
+                break
 
-                if word == "pad_value_rnn":
-                    break
+            for char in unicode(word,"utf-8"):
 
                 if char in char_index_table:
                     word_array.append(char_index_table[char])
@@ -336,7 +343,8 @@ def main():
     # W = model.syn0.astype("float64")
     # # print W.shape
 
-    network = build_network(W,longest_sent_train, input_var)
+
+    network = build_network(W,len(unique_tags_train),55, input_var)
 
     # Create a loss expression for training, i.e., a scalar objective we want
     # to minimize:
@@ -347,10 +355,10 @@ def main():
     # Create update expressions for training, i.e., how to modify the
     # parameters at each training step. Here, we'll use Stochastic Gradient
     # Descent (SGD) with Nesterov momentum, but Lasagne offers plenty more.
-
+    print "unique tags",len(unique_tags_train)
     params = lasagne.layers.get_all_params(network, trainable=True)
     updates = lasagne.updates.nesterov_momentum(
-        loss, params, learning_rate=0.01, momentum=0.9)
+        loss, params, learning_rate=0.001, momentum=0.9)
     print "PARAMS"
     # Create a loss expression for validation/testing. The crucial difference
     # here is that we do a deterministic forward pass through the network,
