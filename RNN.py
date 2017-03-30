@@ -10,12 +10,10 @@ import theano.tensor as T
 import lasagne
 import re
 import sys
-from random import shuffle
 import time
-import gensim
 
-
-
+# to get full representation of numpy arrays
+np.set_printoptions(threshold=np.inf)
 
 # ############################## Data preparation ################################
 
@@ -61,6 +59,8 @@ def prepare_sents(corpus):
         # unique_tokens = [unknown_token] + list(unique_tokens)
         unique_tokens = ["pad_value_rnn"] + list(unique_tokens)
         unique_tags = ["pad_value_rnn"] + list(unique_tags)
+    print "This is the tagset: "
+    print unique_tags
     return sents, tags, unique_tokens, unique_tags, longest_sent
 
 def pad_sent(sents, tags, longest_sent):
@@ -85,10 +85,6 @@ def create_tag_mappings(unique_tags):
     return tag_to_index, tag_to_vector
 
 def replace_unknown_words(sents, token_mappings):
-    # for sent in sents:
-    #     for w in sent:
-    #         if w not in token_mappings:
-    #             w.replace(w, unknown_token)
     sents = [[w.replace(w,unknown_token) if w not in token_mappings else w for w in sent ] for sent in sents]
     return sents
 
@@ -109,9 +105,7 @@ def build_network(X_train, unique_tags, unique_tokens, longest_sent, input_var=N
     print("Building network ...")
     # shape = batch size, longest sent
     l_in = lasagne.layers.InputLayer(shape=(None, longest_sent), input_var=input_var)
-    # l_em = lasagne.layers.EmbeddingLayer(l_in, input_size=len(unique_tokens), output_size=100, W=W)
     l_em = lasagne.layers.EmbeddingLayer(l_in, input_size=len(unique_tokens), output_size=100,  W = lasagne.init.Uniform(0.1))
-    # l_ex = lasagne.layers.ExpressionLayer(l_in, lambda X: X, output_shape='auto')
     l_re = lasagne.layers.RecurrentLayer(l_em, N_HIDDEN, nonlinearity=lasagne.nonlinearities.sigmoid)
     l_out = lasagne.layers.DenseLayer(l_re, longest_sent, nonlinearity=lasagne.nonlinearities.softmax)
     return l_out
@@ -154,93 +148,25 @@ def main():
 
     pad_sent(sents_train, tags_train, longest_sent)
 
-    # X_train = np.asarray([[token_mappings[w] for w in sent] for sent in pad_sent(sents_train, tags_train, longest_sent_train)])
     X_train = np.asarray([[token_mappings[w] for w in sent] for sent in sents_train])
 
-    # one-hot vectors
-    # y_train = np.asarray([[tag_vector_mappings[t] for t in sent_tags] for sent_tags in tags_train])
     # unique integers
     y_train = np.asarray([[tag_index_mappings[t] for t in sent_tags] for sent_tags in tags_train])
-    # y_train = np.asarray(
-    #    [[[0., 0., 0., 0., 0., 0., 1., 0., 0., 0.],
-    #      [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 1., 0., 0., 0., 0., 0., 0.],
-    #      [1., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 0., 0., 0., 0., 0., 1., 0.]],
-    #     [[0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 0., 0., 0., 0., 0., 0., 1.],
-    #      [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 0., 0., 1., 0., 0., 0., 0.],
-    #      [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 0., 0., 0., 0., 1., 0., 0.]]])
-
 
     pad_sent(sents_val, tags_val, longest_sent)
     X_val = np.asarray(
         [[(token_mappings[w] if w in token_mappings else token_mappings["pad_value_rnn"]) for w in sent] for sent in
          sents_val])
-    # X_val = np.asarray([[token_mappings[w] for w in sent] for sent in pad_sent(replace_unknown_words(sents_val, token_mappings), longest_sent_val)])
-    # y_val = np.asarray([[tag_vector_mappings[t] for t in sent_tags] for sent_tags in tags_val])
     y_val = np.asarray([[tag_index_mappings[t] for t in sent_tags] for sent_tags in tags_val])
-    # y_val = np.asarray(
-    #    [[[0., 0., 0., 0., 0., 0., 1., 0., 0., 0.],
-    #      [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 1., 0., 0., 0., 0., 0., 0.],
-    #      [1., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 0., 0., 0., 0., 0., 1., 0.]],
-    #     [[0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 0., 0., 0., 0., 0., 0., 1.],
-    #      [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 0., 0., 1., 0., 0., 0., 0.],
-    #      [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 0., 0., 0., 0., 1., 0., 0.]]])
-
 
     pad_sent(sents_test, tags_test, longest_sent)
     X_test = np.asarray(
         [[(token_mappings[w] if w in token_mappings else token_mappings["pad_value_rnn"]) for w in sent] for sent in
          sents_test])
-    # X_test = np.asarray([[token_mappings[w] for w in sent] for sent in pad_sent(replace_unknown_words(sents_test, token_mappings), longest_sent_test)])
-    # y_test = np.asarray([[tag_vector_mappings[t] for t in sent_tags] for sent_tags in tags_test])
     y_test = np.asarray([[tag_index_mappings[t] for t in sent_tags] for sent_tags in tags_test])
-    # print y_test.shape
-
-    # y_test = np.asarray(
-    #    [[[0., 0., 0., 0., 0., 0., 1., 0., 0., 0.],
-    #      [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 1., 0., 0., 0., 0., 0., 0.],
-    #      [1., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 0., 0., 0., 0., 0., 1., 0.]],
-    #     [[0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 0., 0., 0., 0., 0., 0., 1.],
-    #      [0., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 0., 0., 1., 0., 0., 0., 0.],
-    #      [0., 0., 1., 0., 0., 0., 0., 0., 0., 0.],
-    #      [0., 0., 0., 0., 0., 0., 0., 1., 0., 0.]]])
-
 
     input_var = T.lmatrix('inputs')
-    # input_var = T.dtensor3('inputs')
-    # target_var = T.dtensor3('targets')
     target_var = T.dmatrix('targets')
-
-    # gensim 2D NumPy matrix
-    # model_train = gensim.models.Word2Vec(sents_train, min_count=1)
-    # # W = model_train.syn0.astype("float64")
-    # emb_train = get_embeddings(model_train, sents_train)
-    # model_val = gensim.models.Word2Vec(sents_val, min_count=1)
-    # emb_val = get_embeddings(model_val, sents_val)
-    # model_test = gensim.models.Word2Vec(sents_test, min_count=1)
-    # emb_test = get_embeddings(model_test, sents_test)
 
     network = build_network(X_train, unique_tags_train, unique_tokens_train, longest_sent, input_var)
     # Create a loss expression for training, i.e., a scalar objective we want
@@ -270,7 +196,6 @@ def main():
     # As a bonus, also create an expression for the classification accuracy:
     test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=0), target_var),
                       dtype=theano.config.floatX)
-    # target_var = T.dtensor3('targets')
 
     # Compile a function performing a training step on a mini-batch (by giving
     # the updates dictionary) and returning the corresponding training loss:
@@ -287,6 +212,8 @@ def main():
         train_err = 0
         train_batches = 0
         start_time = time.time()
+        print "Shape of X and y: "
+        print X_train.shape, y_train.shape
         for batch in iterate_minibatches(X_train, y_train, 300, shuffle=True):
             inputs, targets = batch
             train_err += train_fn(inputs, targets)
@@ -299,8 +226,6 @@ def main():
         val_batches = 0
         for batch in iterate_minibatches(X_val, y_val, 300, shuffle=False):
             inputs, targets = batch
-            # print inputs
-            # print inputs.shape, targets.shape
             err, acc = val_fn(inputs, targets)
             val_err += err
             val_acc += acc
@@ -321,8 +246,8 @@ def main():
     test_batches = 0
     for batch in iterate_minibatches(X_test, y_test, 300, shuffle=False):
         inputs, targets = batch
-        # print inputs
-        # print f_test(inputs).shape
+        print "Tag probability distribution for the test data: "
+        print f_test(inputs)
         err, acc = val_fn(inputs, targets)
         test_err += err
         test_acc += acc
